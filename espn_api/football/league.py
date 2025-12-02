@@ -279,7 +279,7 @@ class League(BaseLeague):
         data = self.espn_request.league_get(params=params)
 
         schedule = data['schedule']
-        matchups = [Matchup(matchup) for matchup in schedule]
+        matchups = [Matchup(matchup) for matchup in schedule if matchup['matchupPeriodId'] < self.current_week]
 
         for team in self.teams:
             for matchup in matchups:
