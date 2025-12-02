@@ -270,6 +270,27 @@ class League(BaseLeague):
 
         return activity
 
+    def matchups(self) -> List[Matchup]:
+        'Returns all matchups'
+
+        params = {
+            'view': 'mMatchupScore',
+        }
+        data = self.espn_request.league_get(params=params)
+
+        schedule = data['schedule']
+        matchups = [Matchup(matchup) for matchup in schedule]
+
+        for team in self.teams:
+            for matchup in matchups:
+                if matchup._home_team_id == team.team_id:
+                    matchup.home_team = team
+                elif matchup._away_team_id == team.team_id:
+                    matchup.away_team = team
+
+        return matchups
+
+
     def scoreboard(self, week: int = None) -> List[Matchup]:
         '''Returns list of matchups for a given week'''
         if not week:
