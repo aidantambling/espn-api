@@ -1,6 +1,7 @@
 import json
 import random
 from typing import Callable, Dict, List, Set, Tuple, Union
+import asyncio
 
 from ..base_league import BaseLeague
 from .team import Team
@@ -312,6 +313,17 @@ class League(BaseLeague):
                     matchup.away_team = team
 
         return matchups
+
+
+    async def fetch_all_boxscores(league):
+        async def fetch(wk):
+            return wk, league.box_scores(wk)
+
+        weeks = range(1, league.current_week + 1)
+        results = await asyncio.gather(*(fetch(w) for w in weeks))
+
+        week_map = {wk: boxes for wk, boxes in results}
+        return week_map
 
     def box_scores(self, week: int = None) -> List[BoxScore]:
         '''Returns list of box score for a given week\n
