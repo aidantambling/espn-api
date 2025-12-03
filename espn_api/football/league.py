@@ -315,15 +315,32 @@ class League(BaseLeague):
         return matchups
 
 
-    async def fetch_all_boxscores(league):
-        async def fetch(wk):
-            return wk, league.box_scores(wk)
+    def all_box_scores(self) -> List[BoxScore]:
+        '''Returns list of box score for a given week\n
+        Should only be used with most recent season'''
+        if self.year < 2019:
+            raise Exception('Cant use box score before 2019')
 
-        weeks = range(1, league.current_week + 1)
-        results = await asyncio.gather(*(fetch(w) for w in weeks))
+        params = {
+            'view': ['mMatchupScore', 'mScoreboard'],
+        }
 
-        week_map = {wk: boxes for wk, boxes in results}
-        return week_map
+        headers = {'x-fantasy-filter': json.dumps(filters)}
+        data = self.espn_request.league_get(params=params, headers=headers)
+
+        schedule = data['schedule']
+        pro_schedule = self._get_pro_schedule(scoring_period)
+        positional_rankings = self._get_positional_ratings(scoring_period)
+        box_data = [BoxScore(matchup, pro_schedule, positional_rankings, scoring_period, self.year) for matchup in schedule]
+
+        for team in self.teams:
+            for matchup in box_data:
+                if matchup.home_team == team.team_id:
+                    matchup.home_team = team
+                elif matchup.away_team == team.team_id:
+                    matchup.away_team = team
+        return box_data
+
 
     def box_scores(self, week: int = None) -> List[BoxScore]:
         '''Returns list of box score for a given week\n
