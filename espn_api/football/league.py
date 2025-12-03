@@ -325,8 +325,7 @@ class League(BaseLeague):
             'view': ['mMatchupScore', 'mScoreboard'],
         }
 
-        headers = {'x-fantasy-filter': json.dumps(filters)}
-        data = self.espn_request.league_get(params=params, headers=headers)
+        data = self.espn_request.league_get(params=params)
 
         schedule = data['schedule']
         pro_schedule = self._get_pro_schedule(scoring_period)
