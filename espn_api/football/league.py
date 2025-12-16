@@ -316,28 +316,54 @@ class League(BaseLeague):
 
 
     def all_box_scores(self) -> List[BoxScore]:
-        '''Returns list of box score for a given week\n
-        Should only be used with most recent season'''
+        """
+        Return BoxScore objects for *all* matchups in the season.
+
+        NOTE:
+        - Requires year >= 2019 (same constraint as box_scores()) because
+          ESPN doesn’t expose full box data before then.
+        - This makes ONE league_get() call for the whole schedule, then
+          one pro-schedule + one positional-ratings call per distinct week.
+        """
         if self.year < 2019:
-            raise Exception('Cant use box score before 2019')
+            raise Exception("Cant use box score before 2019")
 
+        # 1) Get the full season schedule with boxscore info
         params = {
-            'view': ['mMatchupScore', 'mScoreboard'],
+            "view": ["mMatchupScore", "mScoreboard"],
         }
-
         data = self.espn_request.league_get(params=params)
+        schedule = data["schedule"]
 
-        schedule = data['schedule']
-        pro_schedule = self._get_pro_schedule(scoring_period)
-        positional_rankings = self._get_positional_ratings(scoring_period)
-        box_data = [BoxScore(matchup, pro_schedule, positional_rankings, scoring_period, self.year) for matchup in schedule]
+        # 2) Pre-compute pro_schedule & positional_ratings per matchupPeriodId (week)
+        week_context: dict[int, tuple[dict, dict]] = {}
+        for matchup in schedule:
+            week = matchup.get("matchupPeriodId")
+            if week is None:
+                continue  # defensive, but shouldn't happen
+            if week not in week_context:
+                pro_schedule = self._get_pro_schedule(week)
+                positional_rankings = self._get_positional_ratings(week)
+                week_context[week] = (pro_schedule, positional_rankings)
 
+        # 3) Build BoxScore objects for every matchup, using the right week ctx
+        box_data: List[BoxScore] = []
+        for matchup in schedule:
+            week = matchup.get("matchupPeriodId")
+            if week is None:
+                continue
+            pro_schedule, positional_rankings = week_context[week]
+            box = BoxScore(matchup, pro_schedule, positional_rankings, week, self.year)
+            box_data.append(box)
+
+        # 4) Attach Team instances (same pattern as box_scores / scoreboard)
         for team in self.teams:
             for matchup in box_data:
                 if matchup.home_team == team.team_id:
                     matchup.home_team = team
                 elif matchup.away_team == team.team_id:
                     matchup.away_team = team
+
         return box_data
 
 

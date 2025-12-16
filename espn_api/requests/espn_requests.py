@@ -1,5 +1,7 @@
 import requests
 import json
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from .constant import FANTASY_BASE_ENDPOINT, NEWS_BASE_ENDPOINT, FANTASY_SPORTS
 from ..utils.logger import Logger
 from typing import List
@@ -28,6 +30,23 @@ class EspnFantasyRequests(object):
         self.cookies = cookies
         self.logger = logger
 
+        self.session = requests.Session()
+        self.session.trust_env = False
+
+        retries = Retry(
+            total=5,
+            connect=5,
+            read=5,
+            backoff_factor=0.5,
+            status_forcelist=(429, 500, 502, 503, 504),
+            allowed_methods=frozenset(["GET", "HEAD"]),
+            raise_on_status=False,
+        )
+        adapter = HTTPAdapter(max_retries=retries, pool_connections=20, pool_maxsize=20)
+        self.session.mount("https://", adapter)
+        self.session.mount("http://", adapter)
+        self.timeout = 15
+
         self.LEAGUE_ENDPOINT = FANTASY_BASE_ENDPOINT + FANTASY_SPORTS[sport]
         # older season data is stored at a different endpoint
         if year < 2018:
@@ -48,7 +67,13 @@ class EspnFantasyRequests(object):
                 self.LEAGUE_ENDPOINT = f"{base_endpoint}/leagueHistory/{self.league_id}?seasonId={self.year}"
 
             #try the alternate endpoint
-            r = requests.get(self.LEAGUE_ENDPOINT + extend, params=params, headers=headers, cookies=self.cookies)
+            r = self.session.get(
+                self.LEAGUE_ENDPOINT + extend,
+                params=params,
+                headers=headers,
+                cookies=self.cookies,
+                timeout=self.timeout,
+            )
 
             if r.status_code == 200:
                 # Return the updated response if alternate works
@@ -71,7 +96,7 @@ class EspnFantasyRequests(object):
 
     def league_get(self, params: dict = None, headers: dict = None, extend: str = ''):
         endpoint = self.LEAGUE_ENDPOINT + extend
-        r = requests.get(endpoint, params=params, headers=headers, cookies=self.cookies)
+        r = self.session.get(endpoint, params=params, headers=headers, cookies=self.cookies, timeout=self.timeout)
         alternate_response = self.checkRequestStatus(r.status_code, extend=extend, params=params, headers=headers)
 
 
@@ -84,7 +109,7 @@ class EspnFantasyRequests(object):
 
     def get(self, params: dict = None, headers: dict = None, extend: str = ''):
         endpoint = self.ENDPOINT + extend
-        r = requests.get(endpoint, params=params, headers=headers, cookies=self.cookies)
+        r = self.session.get(endpoint, params=params, headers=headers, cookies=self.cookies, timeout=self.timeout)
         self.checkRequestStatus(r.status_code)
 
         if self.logger:
@@ -93,7 +118,7 @@ class EspnFantasyRequests(object):
 
     def news_get(self, params: dict = None, headers: dict = None, extend: str = ''):
         endpoint = self.NEWS_ENDPOINT + extend
-        r = requests.get(endpoint, params=params, headers=headers, cookies=self.cookies)
+        r = self.session.get(endpoint, params=params, headers=headers, cookies=self.cookies, timeout=self.timeout)
 
         if self.logger:
             self.logger.log_request(endpoint=endpoint, params=params, headers=headers, response=r.json())
